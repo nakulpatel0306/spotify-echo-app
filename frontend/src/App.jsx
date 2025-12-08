@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 
-const CLIENT_ID = "9515b94349c74337bd2199ce4cb16f6c"; // your app's client id
+const CLIENT_ID = "9515b94349c74337bd2199ce4cb16f6c";
 const REDIRECT_URI = "https://spotify-echo-app.vercel.app/callback";
 const SCOPES = "user-top-read user-read-recently-played";
 const BACKEND_BASE = "https://spotify-echo-app.onrender.com";
