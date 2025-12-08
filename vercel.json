@@ -1,0 +1,16 @@
+{
+    "projects": [
+      {
+        "name": "spotify-echo-app-frontend",
+        "rootDirectory": "frontend",
+        "framework": "vite",
+        "rewrites": [
+          {
+            "source": "/(.*)",
+            "destination": "/"
+          }
+        ]
+      }
+    ]
+  }
+  
