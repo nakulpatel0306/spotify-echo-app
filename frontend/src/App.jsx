@@ -2,10 +2,17 @@ import React, { useEffect, useState, useMemo } from "react";
 
 // --- OAuth + backend config ---
 const CLIENT_ID = "9515b94349c74337bd2199ce4cb16f6c";
-const REDIRECT_URI = "http://127.0.0.1:5173/callback";
+
+const REDIRECT_URI =
+  import.meta.env.VITE_REDIRECT_URI ||
+  "http://127.0.0.1:5173/callback";
+
 const SCOPES =
   "user-top-read user-read-recently-played playlist-read-private playlist-read-collaborative user-read-email user-read-private";
-const BACKEND_BASE = "http://127.0.0.1:3001";
+
+const BACKEND_BASE =
+  import.meta.env.VITE_BACKEND_BASE ||
+  "http://127.0.0.1:3001";
 
 // helpers
 function buildAuthUrl() {
