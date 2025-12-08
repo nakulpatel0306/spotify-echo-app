@@ -60,107 +60,141 @@ async function spotifyGet(accessToken, endpoint) {
   return res.json();
 }
 
-function groupTopAlbumsFromRecent(items) {
-  const map = new Map();
-  for (const item of items) {
-    const album = item.track?.album;
-    if (!album?.id) continue;
-    const existing = map.get(album.id) || {
-      id: album.id,
-      name: album.name,
-      image: album.images?.[0]?.url || null,
-      playCount: 0,
-      minutes: 0
-    };
-    existing.playCount += 1;
-    existing.minutes += (item.track?.duration_ms || 0) / 1000 / 60;
-    map.set(album.id, existing);
-  }
-  return Array.from(map.values())
-    .sort((a, b) => b.playCount - a.playCount)
-    .slice(0, 12);
-}
-
-// Summary stats: top tracks, artists, albums, and listening metrics
+// overview stats endpoint
 app.get("/stats/summary", async (req, res) => {
   try {
     const authHeader = req.headers.authorization || "";
-    const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+    const token = authHeader.startsWith("Bearer ")
+      ? authHeader.slice(7)
+      : null;
+
     if (!token) {
       return res.status(401).json({ error: "Missing Bearer token" });
     }
 
-    const [topTracks, topArtists, recent] = await Promise.all([
-      spotifyGet(token, "/me/top/tracks?limit=20&time_range=short_term"),
-      spotifyGet(token, "/me/top/artists?limit=20&time_range=short_term"),
+    const rawRange = req.query.time_range || "short_term";
+    const allowedRanges = ["short_term", "medium_term", "long_term"];
+    const timeRange = allowedRanges.includes(rawRange)
+      ? rawRange
+      : "short_term";
+
+    // profile, top tracks, top artists, recent listening
+    const [profile, topTracks, topArtists, recent] = await Promise.all([
+      spotifyGet(token, "/me"),
+      spotifyGet(
+        token,
+        `/me/top/tracks?limit=50&time_range=${encodeURIComponent(timeRange)}`
+      ),
+      spotifyGet(
+        token,
+        `/me/top/artists?limit=50&time_range=${encodeURIComponent(timeRange)}`
+      ),
       spotifyGet(token, "/me/player/recently-played?limit=50")
     ]);
 
-    const items = recent.items || [];
+    // top genres aggregated from top artists
+    const genreCounts = {};
+    (topArtists.items || []).forEach((artist) => {
+      (artist.genres || []).forEach((g) => {
+        const key = g.toLowerCase();
+        genreCounts[key] = (genreCounts[key] || 0) + 1;
+      });
+    });
+    const topGenres = Object.entries(genreCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([genre, count]) => ({ genre, count }));
 
-    const now = new Date();
-    const today = new Date(now);
-    today.setHours(0, 0, 0, 0);
-    const sinceTodayMs = today.getTime();
+    // audio feature summary for top tracks (energy, danceability, tempo)
+    const trackIds = (topTracks.items || [])
+      .map((t) => t.id)
+      .filter(Boolean);
 
-    const sevenDaysAgo = new Date(now);
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    sevenDaysAgo.setHours(0, 0, 0, 0);
-    const since7DaysMs = sevenDaysAgo.getTime();
-
-    let totalMsToday = 0;
-    let totalMsLast7 = 0;
-    const hourly = {};
-    for (let h = 0; h < 24; h++) hourly[h] = 0;
-
-    const dailyMap = new Map(); // dateStr -> minutes
-    let sessionCountToday = 0;
-    let lastPlayTodayMs = null;
-    const SESSION_GAP_MIN = 30;
-
-    for (const item of items) {
-      const playedAt = new Date(item.played_at);
-      const playedMs = playedAt.getTime();
-      const durMs = item.track?.duration_ms || 0;
-
-      if (playedMs >= since7DaysMs) {
-        totalMsLast7 += durMs;
-      }
-
-      const dateKey = playedAt.toISOString().slice(0, 10);
-      const prev = dailyMap.get(dateKey) || 0;
-      dailyMap.set(dateKey, prev + durMs / 1000 / 60);
-
-      if (playedMs >= sinceTodayMs) {
-        totalMsToday += durMs;
-        const hour = playedAt.getHours();
-        hourly[hour] += durMs / 1000 / 60;
-        if (lastPlayTodayMs === null || (playedMs - lastPlayTodayMs) / 60000 > SESSION_GAP_MIN) {
-          sessionCountToday += 1;
-        }
-        lastPlayTodayMs = playedMs;
+    let audioFeatureSummary = null;
+    if (trackIds.length > 0) {
+      const featuresRes = await spotifyGet(
+        token,
+        `/audio-features?ids=${encodeURIComponent(trackIds.join(","))}`
+      );
+      const feats = (featuresRes.audio_features || []).filter(Boolean);
+      if (feats.length > 0) {
+        const sums = feats.reduce(
+          (acc, f) => {
+            acc.tempo += f.tempo || 0;
+            acc.energy += f.energy || 0;
+            acc.danceability += f.danceability || 0;
+            acc.count += 1;
+            return acc;
+          },
+          { tempo: 0, energy: 0, danceability: 0, count: 0 }
+        );
+        audioFeatureSummary = {
+          avgTempo: sums.count ? Math.round(sums.tempo / sums.count) : null,
+          avgEnergy: sums.count
+            ? Math.round((sums.energy / sums.count) * 100)
+            : null,
+          avgDanceability: sums.count
+            ? Math.round((sums.danceability / sums.count) * 100)
+            : null
+        };
       }
     }
 
-    const listeningMinutesToday = Math.round(totalMsToday / 1000 / 60);
-    const listeningMinutesLast7Days = Math.round(totalMsLast7 / 1000 / 60);
+    // recent tracks: last 48h, sessions, minutes
+    const recentItems = recent.items || [];
+    const now = Date.now();
+    const twoDaysMs = 48 * 60 * 60 * 1000;
 
-    const dailyListening = Array.from(dailyMap.entries())
-      .map(([date, minutes]) => ({ date, minutes: Math.round(minutes) }))
-      .sort((a, b) => (a.date < b.date ? -1 : 1))
-      .slice(-7);
+    const recentFiltered = recentItems.filter((item) => {
+      const playedAt = new Date(item.played_at).getTime();
+      return now - playedAt <= twoDaysMs;
+    });
 
-    const topAlbums = groupTopAlbumsFromRecent(items);
+    let totalMsRecent = 0;
+    const recentTracks = recentFiltered
+      .slice()
+      .sort(
+        (a, b) =>
+          new Date(b.played_at).getTime() - new Date(a.played_at).getTime()
+      )
+      .map((item) => {
+        const track = item.track;
+        totalMsRecent += track?.duration_ms || 0;
+        return {
+          played_at: item.played_at,
+          track
+        };
+      });
+
+    const listeningMinutesRecent = Math.round(totalMsRecent / 1000 / 60);
+
+    // sessions: new session if gap > 30min
+    let sessionsCount = 0;
+    let lastTs = null;
+    recentTracks
+      .slice()
+      .sort(
+        (a, b) =>
+          new Date(a.played_at).getTime() - new Date(b.played_at).getTime()
+      )
+      .forEach((item) => {
+        const ts = new Date(item.played_at).getTime();
+        if (lastTs === null || ts - lastTs > 30 * 60 * 1000) {
+          sessionsCount += 1;
+        }
+        lastTs = ts;
+      });
 
     res.json({
+      profile,
+      timeRange,
       topTracks,
       topArtists,
-      topAlbums,
-      listeningMinutesToday,
-      listeningMinutesLast7Days,
-      hourlyListening: hourly,
-      dailyListening,
-      sessionCountToday
+      recentTracks,
+      listeningMinutesRecent,
+      sessionsCount,
+      audioFeatureSummary,
+      topGenres
     });
   } catch (err) {
     console.error(err);
