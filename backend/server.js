@@ -54,7 +54,7 @@ async function spotifyGet(accessToken, endpoint) {
   });
   if (!res.ok) {
     const text = await res.text();
-    console.error("Spotify API error", res.status, text);
+    console.error("Spotify API error", res.status, endpoint, text);
     throw new Error("Spotify API error");
   }
   return res.json();
@@ -78,21 +78,23 @@ app.get("/stats/summary", async (req, res) => {
       ? rawRange
       : "short_term";
 
-    // profile, top tracks, top artists, recent listening
-    const [profile, topTracks, topArtists, recent] = await Promise.all([
-      spotifyGet(token, "/me"),
-      spotifyGet(
-        token,
-        `/me/top/tracks?limit=50&time_range=${encodeURIComponent(timeRange)}`
-      ),
-      spotifyGet(
-        token,
-        `/me/top/artists?limit=50&time_range=${encodeURIComponent(timeRange)}`
-      ),
-      spotifyGet(token, "/me/player/recently-played?limit=50")
-    ]);
+    // profile, top tracks, top artists, recent listening, playlists
+    const [profile, topTracks, topArtists, recent, playlists] =
+      await Promise.all([
+        spotifyGet(token, "/me"),
+        spotifyGet(
+          token,
+          `/me/top/tracks?limit=50&time_range=${encodeURIComponent(timeRange)}`
+        ),
+        spotifyGet(
+          token,
+          `/me/top/artists?limit=50&time_range=${encodeURIComponent(timeRange)}`
+        ),
+        spotifyGet(token, "/me/player/recently-played?limit=50"),
+        spotifyGet(token, "/me/playlists?limit=20")
+      ]);
 
-    // top genres aggregated from top artists
+    // top genres from artists
     const genreCounts = {};
     (topArtists.items || []).forEach((artist) => {
       (artist.genres || []).forEach((g) => {
@@ -105,7 +107,7 @@ app.get("/stats/summary", async (req, res) => {
       .slice(0, 8)
       .map(([genre, count]) => ({ genre, count }));
 
-    // audio feature summary for top tracks (energy, danceability, tempo)
+    // audio feature summary for top tracks
     const trackIds = (topTracks.items || [])
       .map((t) => t.id)
       .filter(Boolean);
@@ -168,7 +170,7 @@ app.get("/stats/summary", async (req, res) => {
 
     const listeningMinutesRecent = Math.round(totalMsRecent / 1000 / 60);
 
-    // sessions: new session if gap > 30min
+    // sessions: gap > 30min = new session
     let sessionsCount = 0;
     let lastTs = null;
     recentTracks
@@ -185,13 +187,22 @@ app.get("/stats/summary", async (req, res) => {
         lastTs = ts;
       });
 
+    // simple estimate: 48h -> daily average -> yearly minutes
+    let estimatedYearlyMinutes = null;
+    if (listeningMinutesRecent > 0) {
+      const daily = listeningMinutesRecent / 2;
+      estimatedYearlyMinutes = Math.round(daily * 365);
+    }
+
     res.json({
       profile,
       timeRange,
       topTracks,
       topArtists,
+      playlists,
       recentTracks,
       listeningMinutesRecent,
+      estimatedYearlyMinutes,
       sessionsCount,
       audioFeatureSummary,
       topGenres

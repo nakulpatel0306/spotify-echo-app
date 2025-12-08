@@ -1,30 +1,21 @@
 import React, { useEffect, useState, useMemo } from "react";
 
-// LOCAL DEV VALUES – change to prod URLs when you deploy
+// --- OAuth + backend config ---
 const CLIENT_ID = "9515b94349c74337bd2199ce4cb16f6c";
 const REDIRECT_URI = "http://127.0.0.1:5173/callback";
-const SCOPES = "user-top-read user-read-recently-played";
+const SCOPES =
+  "user-top-read user-read-recently-played playlist-read-private playlist-read-collaborative user-read-email user-read-private";
 const BACKEND_BASE = "http://127.0.0.1:3001";
 
+// helpers
 function buildAuthUrl() {
   const params = new URLSearchParams({
     client_id: CLIENT_ID,
     response_type: "code",
     redirect_uri: REDIRECT_URI,
-    scope: SCOPES
+    scope: SCOPES,
   });
   return `https://accounts.spotify.com/authorize?${params.toString()}`;
-}
-
-/* ---------- small helpers ---------- */
-
-function humanDate(iso) {
-  if (!iso) return "";
-  const d = new Date(iso);
-  return d.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric"
-  });
 }
 
 function formatNumber(n) {
@@ -34,32 +25,59 @@ function formatNumber(n) {
   return String(n);
 }
 
-/* ---------- auth screens ---------- */
+function humanDate(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+}
+
+async function spotifyFetch(token, path) {
+  const res = await fetch(`https://api.spotify.com/v1${path}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (res.status === 401) throw new Error("unauthorized");
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`spotify error: ${res.status} ${txt}`);
+  }
+  return res.json();
+}
+
+/* ────────────── Login screen ────────────── */
 
 function LoginScreen() {
   return (
-    <div className="app-shell center">
-      <div className="auth-card">
-        <div className="logo">echo</div>
-        <p className="auth-subtitle">
-          a modern spotify tracker for your listening habits.
-        </p>
-        <button
-          className="btn primary"
-          onClick={() => {
-            window.location.href = buildAuthUrl();
-          }}
-        >
-          log in with spotify
-        </button>
-        <p className="auth-footnote">
-          see your top tracks, artists, genres and recent sessions in one clean
-          place.
-        </p>
+    <div className="landing">
+      <div className="landing-bg-glow" />
+      <div className="landing-inner-simple">
+        <div className="landing-copy cardish">
+          <h1 className="landing-logo-word">ECHO</h1>
+          <h2 className="landing-main-title">see your spotify, simply.</h2>
+          <p className="landing-main-sub">
+            A minimal Spotify tracker that shows your top tracks, artists,
+            playlists, and recent listening – powered by the Spotify Web API.
+          </p>
+          <button
+            className="btn primary"
+            onClick={() => {
+              window.location.href = buildAuthUrl();
+            }}
+          >
+            log in with spotify
+          </button>
+          <span className="landing-note">
+            for personal use & API experimentation.
+          </span>
+        </div>
       </div>
     </div>
   );
 }
+
+/* ────────────── Callback (token exchange) ────────────── */
 
 function CallbackScreen({ onToken }) {
   const [status, setStatus] = useState("exchanging code for token...");
@@ -77,7 +95,7 @@ function CallbackScreen({ onToken }) {
         const res = await fetch(`${BACKEND_BASE}/auth/callback`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ code, redirectUri: REDIRECT_URI })
+          body: JSON.stringify({ code, redirectUri: REDIRECT_URI }),
         });
 
         if (!res.ok) {
@@ -108,423 +126,484 @@ function CallbackScreen({ onToken }) {
   }, [onToken]);
 
   return (
-    <div className="app-shell center">
-      <div className="auth-card">
-        <div className="logo">echo</div>
-        <p className="auth-subtitle">{status}</p>
+    <div className="center-screen">
+      <div className="card">
+        <div className="logo-word small">echo</div>
+        <p className="muted">{status}</p>
       </div>
     </div>
   );
 }
 
-/* ---------- layout components ---------- */
+/* ────────────── Dashboard ────────────── */
 
-function Sidebar({ activeView, setActiveView }) {
-  const items = [
-    { id: "overview", label: "Overview" },
-    { id: "tracks", label: "Top Tracks" },
-    { id: "artists", label: "Top Artists" },
-    { id: "history", label: "Listening History" }
-  ];
+function Dashboard({ token, onLogout }) {
+  const [timeRange, setTimeRange] = useState("short_term");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [profile, setProfile] = useState(null);
+  const [topTracks, setTopTracks] = useState([]);
+  const [topArtists, setTopArtists] = useState([]);
+  const [playlists, setPlaylists] = useState([]);
+  const [recent, setRecent] = useState([]);
 
-  return (
-    <aside className="sidebar">
-      <div className="sidebar-logo">echo</div>
-      <div className="sidebar-sub">spotify tracker</div>
-      <nav className="nav">
-        {items.map((item) => (
-          <button
-            key={item.id}
-            className={
-              "nav-item" + (activeView === item.id ? " nav-item-active" : "")
-            }
-            onClick={() => setActiveView(item.id)}
-          >
-            <span>{item.label}</span>
-          </button>
-        ))}
-      </nav>
-      <div className="sidebar-footer">
-        <span className="sidebar-footer-label">built on spotify api</span>
-      </div>
-    </aside>
-  );
-}
+  useEffect(() => {
+    let cancelled = false;
 
-function TimeRangeChips({ timeRange, setTimeRange }) {
-  return (
-    <div className="chips-row">
-      <button
-        className={`chip ${timeRange === "short_term" ? "active" : ""}`}
-        onClick={() => setTimeRange("short_term")}
-      >
-        last 4 weeks
-      </button>
-      <button
-        className={`chip ${timeRange === "medium_term" ? "active" : ""}`}
-        onClick={() => setTimeRange("medium_term")}
-      >
-        last 6 months
-      </button>
-      <button
-        className={`chip ${timeRange === "long_term" ? "active" : ""}`}
-        onClick={() => setTimeRange("long_term")}
-      >
-        all time
-      </button>
-    </div>
-  );
-}
+    async function load() {
+      try {
+        setLoading(true);
+        setError("");
 
-/* ---------- views ---------- */
+        const [me, tracks, artists, playlistsRes, recentRes] = await Promise.all(
+          [
+            spotifyFetch(token, "/me"),
+            spotifyFetch(
+              token,
+              `/me/top/tracks?time_range=${timeRange}&limit=15`
+            ),
+            spotifyFetch(
+              token,
+              `/me/top/artists?time_range=${timeRange}&limit=15`
+            ),
+            spotifyFetch(token, "/me/playlists?limit=20"),
+            spotifyFetch(token, "/me/player/recently-played?limit=25"),
+          ]
+        );
 
-function OverviewView({ summary }) {
-  const { profile, topTracks, topArtists, topGenres, audioFeatureSummary } =
-    summary;
+        if (cancelled) return;
 
-  const displayName = profile?.display_name || "spotify user";
+        setProfile(me);
+        setTopTracks(tracks.items || []);
+        setTopArtists(artists.items || []);
+        setPlaylists(playlistsRes.items || []);
+        setRecent(recentRes.items || []);
+        setLoading(false);
+      } catch (err) {
+        if (cancelled) return;
+        console.error(err);
+        if (String(err).includes("unauthorized")) {
+          onLogout();
+          return;
+        }
+        setError("failed to load data from spotify.");
+        setLoading(false);
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [token, timeRange, onLogout]);
+
+  const displayName =
+    profile?.display_name || profile?.id || "spotify user";
   const avatar =
-    profile?.images?.[0]?.url || profile?.images?.[1]?.url || null;
+    profile?.images?.[0]?.url ||
+    profile?.images?.[1]?.url ||
+    profile?.images?.[2]?.url ||
+    null;
 
-  const topTrack = topTracks.items?.[0];
-  const topArtist = topArtists.items?.[0];
-  const mainGenre = topGenres?.[0]?.genre || "no genre data";
+  const recentMinutesEstimate = useMemo(() => {
+    if (!recent || !recent.length) return null;
+    return Math.round(recent.length * 3.5);
+  }, [recent]);
 
-  const avgTempo = audioFeatureSummary?.avgTempo;
-  const avgEnergy = audioFeatureSummary?.avgEnergy;
-  const avgDance = audioFeatureSummary?.avgDanceability;
+  const uniqueRecentArtists = useMemo(() => {
+    const set = new Set();
+    (recent || []).forEach((item) => {
+      (item.track?.artists || []).forEach((a) => set.add(a.name));
+    });
+    return set.size || null;
+  }, [recent]);
 
-  return (
-    <div className="view-root">
-      <section className="hero">
-        <div className="hero-left">
-          {avatar ? (
-            <img src={avatar} alt="" className="hero-avatar" />
-          ) : (
-            <div className="hero-avatar placeholder" />
-          )}
-          <div>
-            <div className="hero-label">listening overview</div>
-            <div className="hero-title">{displayName}</div>
-            <div className="hero-subtitle">
-              your current soundtrack, summarized.
-            </div>
-          </div>
-        </div>
-        <div className="hero-right">
-          <div className="hero-pill">
-            <span>top track right now</span>
-            <strong>{topTrack ? topTrack.name : "–"}</strong>
-          </div>
-          <div className="hero-pill">
-            <span>most played artist</span>
-            <strong>{topArtist ? topArtist.name : "–"}</strong>
-          </div>
-          <div className="hero-pill">
-            <span>dominant genre</span>
-            <strong>{mainGenre}</strong>
-          </div>
-        </div>
-      </section>
+  // most played album from top tracks
+  const mostPlayedAlbum = useMemo(() => {
+    if (!topTracks.length) return null;
+    const map = new Map();
+    topTracks.forEach((t) => {
+      const album = t.album;
+      if (!album) return;
+      const id = album.id || album.name;
+      if (!id) return;
+      if (!map.has(id)) {
+        map.set(id, {
+          name: album.name,
+          count: 0,
+          img:
+            album.images?.[1]?.url ||
+            album.images?.[0]?.url ||
+            album.images?.[2]?.url ||
+            null,
+          artists: (t.artists || []).map((a) => a.name).join(", "),
+        });
+      }
+      map.get(id).count += 1;
+    });
+    let best = null;
+    map.forEach((val) => {
+      if (!best || val.count > best.count) best = val;
+    });
+    return best;
+  }, [topTracks]);
 
-      <section className="cards-row">
-        <div className="stat-card">
-          <span className="stat-label">recent minutes (48h)</span>
-          <span className="stat-value">
-            {summary.listeningMinutesRecent ?? "–"}
-          </span>
-          <span className="stat-sub">total time in the last 2 days</span>
-        </div>
-        <div className="stat-card">
-          <span className="stat-label">sessions (48h)</span>
-          <span className="stat-value">{summary.sessionsCount ?? "–"}</span>
-          <span className="stat-sub">
-            new session when a 30 min gap appears
-          </span>
-        </div>
-        <div className="stat-card">
-          <span className="stat-label">top genres</span>
-          <span className="stat-value small">
-            {topGenres && topGenres.length > 0
-              ? topGenres
-                  .slice(0, 3)
-                  .map((g) => g.genre)
-                  .join(" · ")
-              : "no data"}
-          </span>
-          <span className="stat-sub">based on your top artists</span>
-        </div>
-      </section>
+  // core genres (up to 5) from top artists
+  const topGenres = useMemo(() => {
+    if (!topArtists.length) return [];
+    const counts = new Map();
+    topArtists.forEach((a) => {
+      (a.genres || []).forEach((g) => {
+        counts.set(g, (counts.get(g) || 0) + 1);
+      });
+    });
+    const arr = Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+    return arr.map(([g]) => g);
+  }, [topArtists]);
 
-      <section className="audio-mood">
-        <div className="section-header">
-          <h3>your listening mood</h3>
-          <span className="section-sub">
-            based on audio features of your top tracks
-          </span>
-        </div>
-        <div className="mood-grid">
-          <div className="mood-item">
-            <div className="mood-label">energy</div>
-            <div className="mood-bar">
-              <div
-                className="mood-bar-fill"
-                style={{ width: `${avgEnergy ?? 0}%` }}
-              />
-            </div>
-            <div className="mood-value">
-              {avgEnergy != null ? `${avgEnergy}%` : "–"}
-            </div>
-          </div>
-          <div className="mood-item">
-            <div className="mood-label">danceability</div>
-            <div className="mood-bar">
-              <div
-                className="mood-bar-fill"
-                style={{ width: `${avgDance ?? 0}%` }}
-              />
-            </div>
-            <div className="mood-value">
-              {avgDance != null ? `${avgDance}%` : "–"}
-            </div>
-          </div>
-          <div className="mood-item">
-            <div className="mood-label">tempo</div>
-            <div className="mood-bar">
-              <div
-                className="mood-bar-fill"
-                style={{
-                  width:
-                    avgTempo != null
-                      ? `${Math.min(Math.max((avgTempo / 200) * 100, 0), 100)}%`
-                      : "0%"
-                }}
-              />
-            </div>
-            <div className="mood-value">
-              {avgTempo != null ? `${avgTempo} bpm` : "–"}
-            </div>
-          </div>
-        </div>
-      </section>
+  // listening-by-hour histogram from recent plays (for "screen time" style chart)
+  const listeningByHour = useMemo(() => {
+    const buckets = Array(24).fill(0);
+    (recent || []).forEach((item) => {
+      if (!item.played_at) return;
+      const d = new Date(item.played_at);
+      const hour = d.getHours();
+      buckets[hour] += 1;
+    });
+    return buckets;
+  }, [recent]);
 
-      <section className="two-col">
-        <div className="panel">
-          <div className="panel-header">
-            <span className="panel-title">top tracks snapshot</span>
-            <span className="panel-subtitle">your current 10 most played</span>
-          </div>
-          <ul className="list">
-            {(topTracks.items || []).slice(0, 10).map((t, i) => {
-              const img =
-                t.album?.images?.[1]?.url ||
-                t.album?.images?.[0]?.url ||
-                t.album?.images?.[2]?.url;
-              return (
-                <li key={t.id || `${t.name}-${i}`} className="list-item">
-                  <span className="index">{i + 1}</span>
-                  {img ? (
-                    <img src={img} alt="" className="thumb" />
-                  ) : (
-                    <div className="thumb placeholder" />
-                  )}
-                  <div className="meta">
-                    <div className="primary">{t.name}</div>
-                    <div className="secondary">
-                      {t.artists.map((a) => a.name).join(", ")}
-                    </div>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-
-        <div className="panel">
-          <div className="panel-header">
-            <span className="panel-title">top artists snapshot</span>
-            <span className="panel-subtitle">your core rotation</span>
-          </div>
-          <ul className="list">
-            {(topArtists.items || []).slice(0, 10).map((a, i) => {
-              const img =
-                a.images?.[1]?.url || a.images?.[0]?.url || a.images?.[2]?.url;
-              const genres = (a.genres || []).slice(0, 2).join(" · ");
-              return (
-                <li key={a.id || `${a.name}-${i}`} className="list-item">
-                  <span className="index">{i + 1}</span>
-                  {img ? (
-                    <img src={img} alt="" className="avatar" />
-                  ) : (
-                    <div className="avatar placeholder" />
-                  )}
-                  <div className="meta">
-                    <div className="primary">{a.name}</div>
-                    <div className="secondary">
-                      {genres || "no genre tagged"}
-                    </div>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      </section>
-    </div>
+  const maxBucket = useMemo(
+    () => listeningByHour.reduce((m, v) => (v > m ? v : m), 0) || 1,
+    [listeningByHour]
   );
-}
 
-function TracksView({ summary }) {
-  const tracks = summary.topTracks.items || [];
-
-  return (
-    <div className="view-root">
-      <div className="section-header">
-        <h3>top tracks</h3>
-        <span className="section-sub">
-          ordered by how much you&apos;ve been looping them
-        </span>
-      </div>
-      <div className="two-col uneven">
-        <div className="panel">
-          <div className="panel-header">
-            <span className="panel-title">full list</span>
-            <span className="panel-subtitle">{tracks.length} tracks</span>
-          </div>
-          <ul className="list">
-            {tracks.map((t, i) => {
-              const img =
-                t.album?.images?.[1]?.url ||
-                t.album?.images?.[0]?.url ||
-                t.album?.images?.[2]?.url;
-              return (
-                <li key={t.id || `${t.name}-${i}`} className="list-item">
-                  <span className="index">{i + 1}</span>
-                  {img ? (
-                    <img src={img} alt="" className="thumb" />
-                  ) : (
-                    <div className="thumb placeholder" />
-                  )}
-                  <div className="meta">
-                    <div className="primary">{t.name}</div>
-                    <div className="secondary">
-                      {t.artists.map((a) => a.name).join(", ")} ·{" "}
-                      {t.album?.name}
-                    </div>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-        <div className="panel">
-          <div className="panel-header">
-            <span className="panel-title">quick highlights</span>
-          </div>
-          <div className="highlights">
-            <div className="highlight-row">
-              <span className="highlight-label">most replayed track</span>
-              <span className="highlight-value">
-                {tracks[0]?.name || "–"}
-              </span>
-            </div>
-            <div className="highlight-row">
-              <span className="highlight-label">opens your sessions often</span>
-              <span className="highlight-value">
-                {tracks[1]?.name || tracks[0]?.name || "–"}
-              </span>
-            </div>
-            <div className="highlight-row">
-              <span className="highlight-label">deep cut in top 10</span>
-              <span className="highlight-value">
-                {tracks[9]?.name || "–"}
-              </span>
-            </div>
-          </div>
-          <div className="hint-text">
-            highlights are simple heuristics on your ordered top list.
-          </div>
+  if (loading) {
+    return (
+      <div className="center-screen">
+        <div className="card">
+          <div className="logo-word small">echo</div>
+          <p className="muted">loading your spotify data…</p>
         </div>
       </div>
-    </div>
-  );
-}
+    );
+  }
 
-function ArtistsView({ summary }) {
-  const artists = summary.topArtists.items || [];
+  if (error) {
+    return (
+      <div className="center-screen">
+        <div className="card">
+          <p className="muted">{error}</p>
+          <button className="btn primary" onClick={onLogout}>
+            log in again
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="view-root">
-      <div className="section-header">
-        <h3>top artists</h3>
-        <span className="section-sub">
-          the people you keep going back to
-        </span>
-      </div>
-      <div className="artist-grid">
-        {artists.map((a, i) => {
-          const img =
-            a.images?.[1]?.url || a.images?.[0]?.url || a.images?.[2]?.url;
-          const genres = (a.genres || []).slice(0, 2).join(" · ");
-          return (
-            <div key={a.id || `${a.name}-${i}`} className="artist-card">
-              {img ? (
-                <img src={img} alt="" className="artist-img" />
+    <div className="app-shell">
+      {/* top bar */}
+      <header className="app-header">
+        <div className="app-header-left">
+          <span className="favicon">🎧</span>
+          <span className="logo-word">echo</span>
+          <span className="muted mini">spotify tracker</span>
+        </div>
+        <div className="app-header-right">
+          <button
+            className={`chip ${timeRange === "short_term" ? "active" : ""}`}
+            onClick={() => setTimeRange("short_term")}
+          >
+            last 4 weeks
+          </button>
+          <button
+            className={`chip ${timeRange === "medium_term" ? "active" : ""}`}
+            onClick={() => setTimeRange("medium_term")}
+          >
+            last 6 months
+          </button>
+          <button
+            className={`chip ${timeRange === "long_term" ? "active" : ""}`}
+            onClick={() => setTimeRange("long_term")}
+          >
+            all time
+          </button>
+          <button className="btn ghost" onClick={onLogout}>
+            log out
+          </button>
+        </div>
+      </header>
+
+      <main className="app-main">
+        {/* row 1: account + small stats */}
+        <section className="row row-top">
+          <div className="card profile-card">
+            <div className="profile-main">
+              {avatar ? (
+                <img src={avatar} alt="" className="profile-avatar" />
               ) : (
-                <div className="artist-img placeholder" />
+                <div className="profile-avatar placeholder" />
               )}
-              <div className="artist-body">
-                <div className="artist-name">{a.name}</div>
-                <div className="artist-genres">
-                  {genres || "no genre tagged"}
-                </div>
-                <div className="artist-meta">
-                  <span>{formatNumber(a.followers?.total)} followers</span>
-                  <span>popularity {a.popularity ?? "-"}</span>
+              <div>
+                <div className="profile-label">account</div>
+                <div className="profile-name">{displayName}</div>
+                <div className="muted mini">
+                  {profile?.product ? `${profile.product} · ` : ""}
+                  {profile?.followers?.total != null
+                    ? `${formatNumber(profile.followers.total)} followers`
+                    : ""}
                 </div>
               </div>
             </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
+          </div>
 
-function HistoryView({ summary }) {
-  const recent = summary.recentTracks || [];
+          <div className="card stat-card">
+            <div className="stat-label">recent minutes (rough)</div>
+            <div className="stat-value">
+              {recentMinutesEstimate != null
+                ? `${recentMinutesEstimate} min`
+                : "–"}
+            </div>
+            <div className="muted mini">
+              based on your last {recent.length || 0} plays
+            </div>
+          </div>
 
-  const grouped = useMemo(() => {
-    const map = new Map();
-    recent.forEach((item) => {
-      const d = new Date(item.played_at);
-      const key = d.toLocaleDateString(undefined, {
-        year: "numeric",
-        month: "short",
-        day: "numeric"
-      });
-      if (!map.has(key)) map.set(key, []);
-      map.get(key).push(item);
-    });
-    return Array.from(map.entries()).sort(
-      (a, b) => new Date(b[0]).getTime() - new Date(a[0]).getTime()
-    );
-  }, [recent]);
+          <div className="card stat-card">
+            <div className="stat-label">unique recent artists</div>
+            <div className="stat-value">
+              {uniqueRecentArtists != null ? uniqueRecentArtists : "–"}
+            </div>
+            <div className="muted mini">in your current listening</div>
+          </div>
 
-  return (
-    <div className="view-root">
-      <div className="section-header">
-        <h3>listening history</h3>
-        <span className="section-sub">
-          last 48 hours of what you actually played
-        </span>
-      </div>
-      <div className="history-columns">
-        {grouped.map(([dateLabel, items]) => (
-          <div key={dateLabel} className="history-day">
-            <div className="history-date">{dateLabel}</div>
+          <div className="card stat-card">
+            <div className="stat-label">playlists</div>
+            <div className="stat-value">
+              {playlists?.length ? playlists.length : "–"}
+            </div>
+            <div className="muted mini">fetched from your library</div>
+          </div>
+        </section>
+
+        {/* row 2: playlists + metric cards */}
+        <section className="row row-playlists">
+          {/* long playlists strip */}
+          <div className="card playlists-card">
+            <div className="card-header">
+              <h3>playlists</h3>
+              <span className="muted mini">view-only from your account</span>
+            </div>
+            <div className="playlist-row">
+              {playlists.map((pl) => {
+                const img =
+                  pl.images?.[0]?.url ||
+                  pl.images?.[1]?.url ||
+                  pl.images?.[2]?.url ||
+                  null;
+                return (
+                  <div className="playlist-card" key={pl.id}>
+                    {img ? (
+                      <img src={img} alt="" className="playlist-cover" />
+                    ) : (
+                      <div className="playlist-cover placeholder" />
+                    )}
+                    <div className="playlist-name" title={pl.name}>
+                      {pl.name}
+                    </div>
+                    <div className="muted tiny">
+                      {pl.tracks?.total != null
+                        ? `${pl.tracks.total} tracks`
+                        : "playlist"}
+                    </div>
+                  </div>
+                );
+              })}
+              {!playlists.length && (
+                <div className="muted mini">
+                  no playlists found – log out and in again if permissions
+                  changed.
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* most played album + mini playlists */}
+          <div className="card metric-card">
+            <div className="metric-label">most played album</div>
+            {mostPlayedAlbum ? (
+              <>
+                <div className="metric-album">
+                  {mostPlayedAlbum.img ? (
+                    <img
+                      src={mostPlayedAlbum.img}
+                      alt=""
+                      className="metric-album-cover"
+                    />
+                  ) : (
+                    <div className="metric-album-cover placeholder" />
+                  )}
+                  <div>
+                    <div className="metric-main">{mostPlayedAlbum.name}</div>
+                    <div className="muted mini">
+                      {mostPlayedAlbum.artists}
+                    </div>
+                    <div className="muted tiny">
+                      seen across your top tracks
+                    </div>
+                  </div>
+                </div>
+                <div className="metric-mini-title">playlist rotation</div>
+                <div className="metric-playlists">
+                  {playlists.slice(0, 6).map((pl) => (
+                    <div className="metric-playlist-pill" key={pl.id}>
+                      <div className="metric-playlist-dot" />
+                      <span className="metric-playlist-name">
+                        {pl.name}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="muted mini">not enough data yet.</div>
+            )}
+          </div>
+
+          {/* listening activity chart */}
+          <div className="card metric-card">
+            <div className="metric-label">listening activity (recent)</div>
+            <div className="activity-chart">
+              {listeningByHour.map((count, hour) => {
+                const heightPct =
+                  maxBucket === 0
+                    ? 0
+                    : Math.max(6, (count / maxBucket) * 100);
+                return (
+                  <div className="activity-bar-wrapper" key={hour}>
+                    <div
+                      className="activity-bar"
+                      style={{ height: `${heightPct}%` }}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+            <div className="activity-axis">
+              <span>0</span>
+              <span>6</span>
+              <span>12</span>
+              <span>18</span>
+              <span>24</span>
+            </div>
+            <div className="muted tiny">
+              counts based on your last {recent.length || 0} plays
+            </div>
+          </div>
+
+          {/* core genres as mini chips */}
+          <div className="card metric-card">
+            <div className="metric-label">core genres</div>
+            {topGenres.length ? (
+              <>
+                <div className="metric-genre-chips">
+                  {topGenres.map((g) => (
+                    <span key={g} className="genre-chip">
+                      {g}
+                    </span>
+                  ))}
+                </div>
+                <div className="muted mini">
+                  based on your current top artists
+                </div>
+              </>
+            ) : (
+              <div className="muted mini">no genre data available.</div>
+            )}
+          </div>
+        </section>
+
+        {/* row 3: top tracks / top artists / recently played */}
+        <section className="row row-bottom">
+          <div className="card list-card">
+            <div className="card-header">
+              <h3>top tracks</h3>
+              <span className="muted mini">your current rotation</span>
+            </div>
             <ul className="list">
-              {items.map((item, i) => {
+              {topTracks.map((t, i) => {
+                const img =
+                  t.album?.images?.[1]?.url ||
+                  t.album?.images?.[0]?.url ||
+                  t.album?.images?.[2]?.url ||
+                  null;
+                return (
+                  <li key={t.id || `${t.name}-${i}`} className="list-item">
+                    <span className="index">{i + 1}</span>
+                    {img ? (
+                      <img src={img} alt="" className="thumb" />
+                    ) : (
+                      <div className="thumb placeholder" />
+                    )}
+                    <div className="meta">
+                      <div className="primary">{t.name}</div>
+                      <div className="secondary">
+                        {t.artists.map((a) => a.name).join(", ")} ·{" "}
+                        {t.album?.name}
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+
+          <div className="card list-card">
+            <div className="card-header">
+              <h3>top artists</h3>
+              <span className="muted mini">who you loop the most</span>
+            </div>
+            <ul className="list">
+              {topArtists.map((a, i) => {
+                const img =
+                  a.images?.[1]?.url ||
+                  a.images?.[0]?.url ||
+                  a.images?.[2]?.url ||
+                  null;
+                const genres = (a.genres || []).slice(0, 2).join(" · ");
+                return (
+                  <li key={a.id || `${a.name}-${i}`} className="list-item">
+                    <span className="index">{i + 1}</span>
+                    {img ? (
+                      <img src={img} alt="" className="avatar" />
+                    ) : (
+                      <div className="avatar placeholder" />
+                    )}
+                    <div className="meta">
+                      <div className="primary">{a.name}</div>
+                      <div className="secondary">
+                        {genres || "no genre tagged"}
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+
+          <div className="card list-card">
+            <div className="card-header">
+              <h3>recently played</h3>
+              <span className="muted mini">
+                last {recent.length || 0} plays on your account
+              </span>
+            </div>
+            <ul className="list compact">
+              {recent.map((item, i) => {
                 const t = item.track;
                 const images = t.album?.images || [];
                 const img =
@@ -549,131 +628,23 @@ function HistoryView({ summary }) {
                   </li>
                 );
               })}
+              {!recent.length && (
+                <li className="muted mini">no recent history available.</li>
+              )}
             </ul>
           </div>
-        ))}
-        {grouped.length === 0 && (
-          <div className="hint-text">
-            no recent history in the last 48 hours.
-          </div>
-        )}
-      </div>
+        </section>
+      </main>
     </div>
   );
 }
 
-/* ---------- main dashboard shell ---------- */
-
-function Dashboard({ token, onLogout }) {
-  const [timeRange, setTimeRange] = useState("short_term");
-  const [activeView, setActiveView] = useState("overview");
-  const [loading, setLoading] = useState(true);
-  const [summary, setSummary] = useState(null);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    async function load() {
-      try {
-        setLoading(true);
-        setError("");
-        const res = await fetch(
-          `${BACKEND_BASE}/stats/summary?time_range=${encodeURIComponent(
-            timeRange
-          )}`,
-          {
-            headers: { Authorization: `Bearer ${token}` }
-          }
-        );
-        if (!res.ok) {
-          const text = await res.text();
-          console.error("stats error", text);
-          setError("failed to load stats.");
-          setLoading(false);
-          return;
-        }
-        const data = await res.json();
-        setSummary(data);
-        setLoading(false);
-      } catch (err) {
-        console.error(err);
-        setError("failed to load stats.");
-        setLoading(false);
-      }
-    }
-    load();
-  }, [token, timeRange]);
-
-  if (loading) {
-    return (
-      <div className="app-shell center">
-        <div className="auth-card">
-          <div className="logo">echo</div>
-          <p className="auth-subtitle">loading your listening stats...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error || !summary) {
-    return (
-      <div className="app-shell center">
-        <div className="auth-card">
-          <div className="logo">echo</div>
-          <p className="auth-subtitle">{error || "no data"}</p>
-          <button className="btn primary" onClick={onLogout}>
-            log out
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  const profileName = summary.profile?.display_name || "spotify user";
-
-  return (
-    <div className="app-shell">
-      <div className="layout">
-        <Sidebar activeView={activeView} setActiveView={setActiveView} />
-        <div className="main">
-          <header className="topbar">
-            <div className="topbar-left">
-              <div className="topbar-title">{profileName}</div>
-              <div className="topbar-subtitle">
-                your spotify stats dashboard
-              </div>
-            </div>
-            <div className="topbar-center">
-              <TimeRangeChips
-                timeRange={timeRange}
-                setTimeRange={setTimeRange}
-              />
-            </div>
-            <div className="topbar-right">
-              <button className="btn ghost" onClick={onLogout}>
-                log out
-              </button>
-            </div>
-          </header>
-
-          <main className="main-content">
-            {activeView === "overview" && <OverviewView summary={summary} />}
-            {activeView === "tracks" && <TracksView summary={summary} />}
-            {activeView === "artists" && <ArtistsView summary={summary} />}
-            {activeView === "history" && <HistoryView summary={summary} />}
-          </main>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ---------- root ---------- */
+/* ────────────── Root app ────────────── */
 
 export default function App() {
   const [token, setToken] = useState(
     () => localStorage.getItem("spotify_access_token") || ""
   );
-
   const pathname = window.location.pathname;
 
   const handleLogout = () => {
