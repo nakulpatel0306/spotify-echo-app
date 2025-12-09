@@ -1,9 +1,10 @@
 # 🎧 echo – Spotify Tracker
 
-A simple, modern web app that uses the **Spotify Web API** to visualize your listening habits.  
-View your **top tracks**, **top artists**, **genres**, **audio mood**, and **recent listening history** across adjustable time ranges.
+A simple, modern web application that integrates with the Spotify Web API to give you a clear, data-driven view of your listening habits.
+Explore your top tracks, top artists, favourite genres, audio feature profiles (energy, danceability, valence, etc.), and your recent listening history — all displayed through clean, interactive visuals with adjustable time ranges.
 
-Built with a **Node.js + Express API**, a **React + Vite frontend**, and designed to be deployed easily on **Render** (backend) and **Vercel** (frontend).
+The project is built with a Node.js + Express backend API for authentication and data processing, and a React + Vite frontend for a fast, responsive user interface.
+Deployment is optimized for Render (backend hosting) and Vercel (frontend hosting), allowing the entire app to run smoothly in production with minimal setup.
 
 ---
 
