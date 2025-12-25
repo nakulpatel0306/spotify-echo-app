@@ -38,13 +38,57 @@ app.post("/auth/callback", async (req, res) => {
   try {
     const { code, redirectUri } = req.body;
     if (!code || !redirectUri) {
+      console.error("Missing code or redirectUri", { code: !!code, redirectUri: !!redirectUri });
       return res.status(400).json({ error: "Missing code or redirectUri" });
     }
+    
+    if (!process.env.SPOTIFY_CLIENT_ID || !process.env.SPOTIFY_CLIENT_SECRET) {
+      console.error("Missing Spotify credentials in .env file");
+      return res.status(500).json({ error: "Server configuration error: Missing Spotify credentials" });
+    }
+    
+    console.log("Exchanging code for token...");
     const tokenData = await exchangeCodeForToken(code, redirectUri);
+    console.log("Token exchange successful");
+    res.json(tokenData);
+  } catch (err) {
+    console.error("Token exchange error:", err.message);
+    res.status(500).json({ error: err.message || "Failed to exchange code for token" });
+  }
+});
+
+async function refreshAccessToken(refreshToken) {
+  const params = new URLSearchParams();
+  params.append("grant_type", "refresh_token");
+  params.append("refresh_token", refreshToken);
+  params.append("client_id", process.env.SPOTIFY_CLIENT_ID);
+  params.append("client_secret", process.env.SPOTIFY_CLIENT_SECRET);
+
+  const res = await fetch(SPOTIFY_TOKEN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: params
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    console.error("Token refresh failed", res.status, text);
+    throw new Error("Token refresh failed");
+  }
+  return res.json();
+}
+
+app.post("/auth/refresh", async (req, res) => {
+  try {
+    const { refresh_token } = req.body;
+    if (!refresh_token) {
+      return res.status(400).json({ error: "Missing refresh_token" });
+    }
+    const tokenData = await refreshAccessToken(refresh_token);
     res.json(tokenData);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Failed to exchange code for token" });
+    res.status(500).json({ error: "Failed to refresh token" });
   }
 });
 
