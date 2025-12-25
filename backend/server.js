@@ -3,15 +3,20 @@ import cors from "cors";
 import dotenv from "dotenv";
 import fetch from "node-fetch";
 
+// load environment variables from .env file
 dotenv.config();
 
 const app = express();
+// enable cors for frontend requests
 app.use(cors());
+// parse json request bodies
 app.use(express.json());
 
+// spotify api endpoints
 const SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token";
 const SPOTIFY_API = "https://api.spotify.com/v1";
 
+// exchange spotify authorization code for access and refresh tokens
 async function exchangeCodeForToken(code, redirectUri) {
   const params = new URLSearchParams();
   params.append("grant_type", "authorization_code");
@@ -34,14 +39,17 @@ async function exchangeCodeForToken(code, redirectUri) {
   return res.json();
 }
 
+// handle oauth callback from spotify, exchange code for tokens
 app.post("/auth/callback", async (req, res) => {
   try {
     const { code, redirectUri } = req.body;
+    // validate required parameters
     if (!code || !redirectUri) {
       console.error("Missing code or redirectUri", { code: !!code, redirectUri: !!redirectUri });
       return res.status(400).json({ error: "Missing code or redirectUri" });
     }
     
+    // check if spotify credentials are configured
     if (!process.env.SPOTIFY_CLIENT_ID || !process.env.SPOTIFY_CLIENT_SECRET) {
       console.error("Missing Spotify credentials in .env file");
       return res.status(500).json({ error: "Server configuration error: Missing Spotify credentials" });
@@ -57,6 +65,7 @@ app.post("/auth/callback", async (req, res) => {
   }
 });
 
+// refresh an expired access token using the refresh token
 async function refreshAccessToken(refreshToken) {
   const params = new URLSearchParams();
   params.append("grant_type", "refresh_token");
@@ -78,6 +87,7 @@ async function refreshAccessToken(refreshToken) {
   return res.json();
 }
 
+// endpoint to refresh access tokens when they expire
 app.post("/auth/refresh", async (req, res) => {
   try {
     const { refresh_token } = req.body;
@@ -92,6 +102,7 @@ app.post("/auth/refresh", async (req, res) => {
   }
 });
 
+// make authenticated request to spotify api
 async function spotifyGet(accessToken, endpoint) {
   const res = await fetch(`${SPOTIFY_API}${endpoint}`, {
     headers: { Authorization: `Bearer ${accessToken}` }
@@ -104,9 +115,10 @@ async function spotifyGet(accessToken, endpoint) {
   return res.json();
 }
 
-// overview stats endpoint
+// get comprehensive user stats including profile, top tracks, artists, playlists, and listening history
 app.get("/stats/summary", async (req, res) => {
   try {
+    // extract bearer token from authorization header
     const authHeader = req.headers.authorization || "";
     const token = authHeader.startsWith("Bearer ")
       ? authHeader.slice(7)
@@ -116,6 +128,7 @@ app.get("/stats/summary", async (req, res) => {
       return res.status(401).json({ error: "Missing Bearer token" });
     }
 
+    // validate and set time range for top tracks/artists (short_term = 4 weeks, medium_term = 6 months, long_term = all time)
     const rawRange = req.query.time_range || "short_term";
     const allowedRanges = ["short_term", "medium_term", "long_term"];
     const timeRange = allowedRanges.includes(rawRange)
@@ -138,7 +151,7 @@ app.get("/stats/summary", async (req, res) => {
         spotifyGet(token, "/me/playlists?limit=20")
       ]);
 
-    // top genres from artists
+    // extract and count genres from top artists, return top 8
     const genreCounts = {};
     (topArtists.items || []).forEach((artist) => {
       (artist.genres || []).forEach((g) => {
@@ -151,7 +164,7 @@ app.get("/stats/summary", async (req, res) => {
       .slice(0, 8)
       .map(([genre, count]) => ({ genre, count }));
 
-    // audio feature summary for top tracks
+    // calculate average audio features (tempo, energy, danceability) from top tracks
     const trackIds = (topTracks.items || [])
       .map((t) => t.id)
       .filter(Boolean);
@@ -164,6 +177,7 @@ app.get("/stats/summary", async (req, res) => {
       );
       const feats = (featuresRes.audio_features || []).filter(Boolean);
       if (feats.length > 0) {
+        // sum up all audio features and calculate averages
         const sums = feats.reduce(
           (acc, f) => {
             acc.tempo += f.tempo || 0;
@@ -186,7 +200,7 @@ app.get("/stats/summary", async (req, res) => {
       }
     }
 
-    // recent tracks: last 48h, sessions, minutes
+    // filter recent tracks to last 48 hours and calculate total listening time
     const recentItems = recent.items || [];
     const now = Date.now();
     const twoDaysMs = 48 * 60 * 60 * 1000;
@@ -196,6 +210,7 @@ app.get("/stats/summary", async (req, res) => {
       return now - playedAt <= twoDaysMs;
     });
 
+    // sort by most recent and sum up track durations
     let totalMsRecent = 0;
     const recentTracks = recentFiltered
       .slice()
@@ -214,7 +229,7 @@ app.get("/stats/summary", async (req, res) => {
 
     const listeningMinutesRecent = Math.round(totalMsRecent / 1000 / 60);
 
-    // sessions: gap > 30min = new session
+    // count listening sessions (new session if gap between plays is > 30 minutes)
     let sessionsCount = 0;
     let lastTs = null;
     recentTracks
@@ -231,7 +246,7 @@ app.get("/stats/summary", async (req, res) => {
         lastTs = ts;
       });
 
-    // simple estimate: 48h -> daily average -> yearly minutes
+    // estimate yearly listening time based on 48 hour average (divide by 2 for daily, multiply by 365)
     let estimatedYearlyMinutes = null;
     if (listeningMinutesRecent > 0) {
       const daily = listeningMinutesRecent / 2;
@@ -257,6 +272,7 @@ app.get("/stats/summary", async (req, res) => {
   }
 });
 
+// start server on port from env or default to 3001
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`Backend running on port ${PORT}`);

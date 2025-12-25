@@ -1,20 +1,23 @@
 import React, { useEffect, useState, useMemo, useRef } from "react";
 
-// --- OAuth + backend config ---
+// spotify oauth and backend configuration
 const CLIENT_ID = "9515b94349c74337bd2199ce4cb16f6c";
 
+// redirect uri for oauth callback, can be overridden via env variable
 const REDIRECT_URI =
   import.meta.env.VITE_REDIRECT_URI ||
   "http://127.0.0.1:5173/callback";
 
+// spotify api scopes required for the app
 const SCOPES =
   "user-top-read user-read-recently-played playlist-read-private playlist-read-collaborative user-read-email user-read-private";
 
+// backend api base url, can be overridden via env variable
 const BACKEND_BASE =
   import.meta.env.VITE_BACKEND_BASE ||
   "http://127.0.0.1:3001";
 
-// helpers
+// build spotify oauth authorization url with required parameters
 function buildAuthUrl() {
   const params = new URLSearchParams({
     client_id: CLIENT_ID,
@@ -26,6 +29,7 @@ function buildAuthUrl() {
   return `https://accounts.spotify.com/authorize?${params.toString()}`;
 }
 
+// format large numbers with K or M suffix for display
 function formatNumber(n) {
   if (n == null) return "-";
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
@@ -33,6 +37,7 @@ function formatNumber(n) {
   return String(n);
 }
 
+// format iso date string to short format like "Jan 15"
 function humanDate(iso) {
   if (!iso) return "";
   const d = new Date(iso);
@@ -42,26 +47,29 @@ function humanDate(iso) {
   });
 }
 
-// Token management helpers
+// get stored access and refresh tokens from localStorage
 function getStoredTokens() {
   const accessToken = localStorage.getItem("spotify_access_token");
   const refreshToken = localStorage.getItem("spotify_refresh_token");
   return { accessToken, refreshToken };
 }
 
+// save access and refresh tokens to localStorage
 function setStoredTokens(accessToken, refreshToken) {
   if (accessToken) localStorage.setItem("spotify_access_token", accessToken);
   if (refreshToken) localStorage.setItem("spotify_refresh_token", refreshToken);
 }
 
+// remove all stored tokens from localStorage
 function clearStoredTokens() {
   localStorage.removeItem("spotify_access_token");
   localStorage.removeItem("spotify_refresh_token");
 }
 
-// Token refresh lock to prevent race conditions
+// lock to prevent multiple simultaneous token refresh requests
 let refreshPromise = null;
 
+// call backend to refresh an expired access token
 async function refreshToken(refreshToken) {
   const res = await fetch(`${BACKEND_BASE}/auth/refresh`, {
     method: "POST",
@@ -74,17 +82,18 @@ async function refreshToken(refreshToken) {
   return res.json();
 }
 
+// make authenticated request to spotify api, automatically refresh token if expired
 async function spotifyFetch(token, path, onTokenUpdate) {
   const res = await fetch(`https://api.spotify.com/v1${path}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   
-  // If unauthorized, try to refresh token
+  // if token expired, try to refresh it and retry the request
   if (res.status === 401 && onTokenUpdate) {
     const { refreshToken: storedRefreshToken } = getStoredTokens();
     if (storedRefreshToken) {
       try {
-        // Use existing refresh promise if one is in progress, otherwise create new one
+        // reuse existing refresh promise if refresh is already in progress
         if (!refreshPromise) {
           refreshPromise = refreshToken(storedRefreshToken);
         }
@@ -95,10 +104,10 @@ async function spotifyFetch(token, path, onTokenUpdate) {
         setStoredTokens(newAccessToken, newRefreshToken);
         onTokenUpdate(newAccessToken);
         
-        // Clear refresh promise after successful refresh
+        // clear refresh promise after successful refresh
         refreshPromise = null;
         
-        // Retry the request with new token
+        // retry the original request with the new token
         const retryRes = await fetch(`https://api.spotify.com/v1${path}`, {
           headers: { Authorization: `Bearer ${newAccessToken}` },
         });
@@ -107,7 +116,7 @@ async function spotifyFetch(token, path, onTokenUpdate) {
         }
         return retryRes.json();
       } catch (refreshErr) {
-        refreshPromise = null; // Clear on error so next attempt can retry
+        refreshPromise = null; // clear on error so next attempt can retry
         throw new Error("unauthorized");
       }
     }
@@ -154,12 +163,14 @@ function LoginScreen() {
 
 /* ────────────── Callback (token exchange) ────────────── */
 
+// handle oauth callback from spotify, exchange code for tokens
 function CallbackScreen({ onToken }) {
   const [status, setStatus] = useState("exchanging code for token...");
 
   useEffect(() => {
     async function run() {
       try {
+        // extract authorization code from url query parameters
         const url = new URL(window.location.href);
         const code = url.searchParams.get("code");
         if (!code) {
@@ -167,6 +178,7 @@ function CallbackScreen({ onToken }) {
           return;
         }
 
+        // exchange code for tokens via backend
         const res = await fetch(`${BACKEND_BASE}/auth/callback`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -194,10 +206,11 @@ function CallbackScreen({ onToken }) {
           return;
         }
 
-        // Store both access and refresh tokens
+        // store both access and refresh tokens in localStorage
         setStoredTokens(data.access_token, data.refresh_token);
         onToken(data.access_token);
 
+        // clean up url by removing the code parameter
         window.history.replaceState({}, "", "/");
       } catch (err) {
         console.error("Callback error:", err);
@@ -220,6 +233,7 @@ function CallbackScreen({ onToken }) {
 
 /* ────────────── Dashboard ────────────── */
 
+// main dashboard component displaying user's spotify data
 function Dashboard({ token, onLogout, onTokenUpdate }) {
   const [timeRange, setTimeRange] = useState("short_term");
   const [loading, setLoading] = useState(true);
@@ -231,10 +245,12 @@ function Dashboard({ token, onLogout, onTokenUpdate }) {
   const [recent, setRecent] = useState([]);
   const [currentToken, setCurrentToken] = useState(token);
 
+  // update current token when prop changes
   useEffect(() => {
     setCurrentToken(token);
   }, [token]);
 
+  // fetch all spotify data when token or time range changes
   useEffect(() => {
     let cancelled = false;
 
@@ -243,6 +259,7 @@ function Dashboard({ token, onLogout, onTokenUpdate }) {
         setLoading(true);
         setError("");
 
+        // fetch all data in parallel for better performance
         const [me, tracks, artists, playlistsRes, recentRes] = await Promise.all(
           [
             spotifyFetch(currentToken, "/me", (newToken) => {
@@ -294,6 +311,7 @@ function Dashboard({ token, onLogout, onTokenUpdate }) {
           ]
         );
 
+        // don't update state if component unmounted
         if (cancelled) return;
 
         setProfile(me);
@@ -305,6 +323,7 @@ function Dashboard({ token, onLogout, onTokenUpdate }) {
       } catch (err) {
         if (cancelled) return;
         console.error(err);
+        // if unauthorized, trigger logout to force re-authentication
         if (String(err).includes("unauthorized")) {
           onLogout();
           return;
@@ -315,11 +334,13 @@ function Dashboard({ token, onLogout, onTokenUpdate }) {
     }
 
     load();
+    // cleanup function to prevent state updates after unmount
     return () => {
       cancelled = true;
     };
   }, [currentToken, timeRange, onLogout, onTokenUpdate]);
 
+  // extract display name and avatar from profile, with fallbacks
   const displayName =
     profile?.display_name || profile?.id || "spotify user";
   const avatar =
@@ -328,11 +349,13 @@ function Dashboard({ token, onLogout, onTokenUpdate }) {
     profile?.images?.[2]?.url ||
     null;
 
+  // estimate listening minutes based on number of recent plays (rough estimate: 3.5 min per track)
   const recentMinutesEstimate = useMemo(() => {
     if (!recent || !recent.length) return null;
     return Math.round(recent.length * 3.5);
   }, [recent]);
 
+  // count unique artists in recent listening history
   const uniqueRecentArtists = useMemo(() => {
     const set = new Set();
     (recent || []).forEach((item) => {
@@ -341,7 +364,7 @@ function Dashboard({ token, onLogout, onTokenUpdate }) {
     return set.size || null;
   }, [recent]);
 
-  // most played album from top tracks
+  // find the most frequently appearing album in top tracks
   const mostPlayedAlbum = useMemo(() => {
     if (!topTracks.length) return null;
     const map = new Map();
@@ -371,7 +394,7 @@ function Dashboard({ token, onLogout, onTokenUpdate }) {
     return best;
   }, [topTracks]);
 
-  // core genres (up to 5) from top artists
+  // extract top 5 genres from top artists, sorted by frequency
   const topGenres = useMemo(() => {
     if (!topArtists.length) return [];
     const counts = new Map();
@@ -386,7 +409,7 @@ function Dashboard({ token, onLogout, onTokenUpdate }) {
     return arr.map(([g]) => g);
   }, [topArtists]);
 
-  // listening-by-hour histogram from recent plays (for "screen time" style chart)
+  // create 24-hour histogram of listening activity from recent plays
   const listeningByHour = useMemo(() => {
     const buckets = Array(24).fill(0);
     (recent || []).forEach((item) => {
@@ -398,6 +421,7 @@ function Dashboard({ token, onLogout, onTokenUpdate }) {
     return buckets;
   }, [recent]);
 
+  // find max value in histogram for scaling chart bars
   const maxBucket = useMemo(
     () => listeningByHour.reduce((m, v) => (v > m ? v : m), 0) || 1,
     [listeningByHour]
@@ -764,46 +788,51 @@ function Dashboard({ token, onLogout, onTokenUpdate }) {
 
 /* ────────────── Root app ────────────── */
 
+// root app component that handles routing and authentication state
 export default function App() {
-  // Check for logout parameter FIRST, before initializing token state
+  // check for logout parameter in url before initializing token state
   const urlParams = new URLSearchParams(window.location.search);
   const isLogout = urlParams.has("logout");
   
-  // If logout parameter exists, clear tokens immediately
+  // if logout parameter exists, clear tokens immediately
   if (isLogout) {
     clearStoredTokens();
-    // Clean up the URL immediately
+    // clean up url by removing logout parameter
     window.history.replaceState({}, "", "/");
   }
   
+  // initialize token from localStorage, but don't load if we just logged out
   const [token, setToken] = useState(
     () => {
-      // Don't load token if we just logged out
       if (isLogout) return "";
       return getStoredTokens().accessToken || "";
     }
   );
   const pathname = window.location.pathname;
 
+  // handle logout: clear tokens and force page reload with logout parameter
   const handleLogout = () => {
-    // Clear all tokens from localStorage
     clearStoredTokens();
     setToken("");
-    // Force a full page reload with cache busting to ensure clean state
+    // force full page reload with cache busting to ensure clean state
     window.location.href = "/?logout=" + Date.now();
   };
 
+  // update token state when token is refreshed
   const handleTokenUpdate = (newToken) => {
     setToken(newToken);
   };
 
+  // show callback screen when on oauth callback route
   if (pathname === "/callback") {
     return <CallbackScreen onToken={setToken} />;
   }
 
+  // show login screen if no token
   if (!token) {
     return <LoginScreen />;
   }
 
+  // show dashboard if authenticated
   return <Dashboard token={token} onLogout={handleLogout} onTokenUpdate={handleTokenUpdate} />;
 }
