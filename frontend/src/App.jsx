@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 
 // --- OAuth + backend config ---
 const CLIENT_ID = "9515b94349c74337bd2199ce4cb16f6c";
@@ -21,6 +21,7 @@ function buildAuthUrl() {
     response_type: "code",
     redirect_uri: REDIRECT_URI,
     scope: SCOPES,
+    show_dialog: "true", // Force user to see login screen even if previously approved
   });
   return `https://accounts.spotify.com/authorize?${params.toString()}`;
 }
@@ -41,10 +42,77 @@ function humanDate(iso) {
   });
 }
 
-async function spotifyFetch(token, path) {
+// Token management helpers
+function getStoredTokens() {
+  const accessToken = localStorage.getItem("spotify_access_token");
+  const refreshToken = localStorage.getItem("spotify_refresh_token");
+  return { accessToken, refreshToken };
+}
+
+function setStoredTokens(accessToken, refreshToken) {
+  if (accessToken) localStorage.setItem("spotify_access_token", accessToken);
+  if (refreshToken) localStorage.setItem("spotify_refresh_token", refreshToken);
+}
+
+function clearStoredTokens() {
+  localStorage.removeItem("spotify_access_token");
+  localStorage.removeItem("spotify_refresh_token");
+}
+
+// Token refresh lock to prevent race conditions
+let refreshPromise = null;
+
+async function refreshToken(refreshToken) {
+  const res = await fetch(`${BACKEND_BASE}/auth/refresh`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refresh_token: refreshToken }),
+  });
+  if (!res.ok) {
+    throw new Error("Failed to refresh token");
+  }
+  return res.json();
+}
+
+async function spotifyFetch(token, path, onTokenUpdate) {
   const res = await fetch(`https://api.spotify.com/v1${path}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
+  
+  // If unauthorized, try to refresh token
+  if (res.status === 401 && onTokenUpdate) {
+    const { refreshToken: storedRefreshToken } = getStoredTokens();
+    if (storedRefreshToken) {
+      try {
+        // Use existing refresh promise if one is in progress, otherwise create new one
+        if (!refreshPromise) {
+          refreshPromise = refreshToken(storedRefreshToken);
+        }
+        const newTokenData = await refreshPromise;
+        
+        const newAccessToken = newTokenData.access_token;
+        const newRefreshToken = newTokenData.refresh_token || storedRefreshToken;
+        setStoredTokens(newAccessToken, newRefreshToken);
+        onTokenUpdate(newAccessToken);
+        
+        // Clear refresh promise after successful refresh
+        refreshPromise = null;
+        
+        // Retry the request with new token
+        const retryRes = await fetch(`https://api.spotify.com/v1${path}`, {
+          headers: { Authorization: `Bearer ${newAccessToken}` },
+        });
+        if (!retryRes.ok) {
+          throw new Error("unauthorized");
+        }
+        return retryRes.json();
+      } catch (refreshErr) {
+        refreshPromise = null; // Clear on error so next attempt can retry
+        throw new Error("unauthorized");
+      }
+    }
+  }
+  
   if (res.status === 401) throw new Error("unauthorized");
   if (!res.ok) {
     const txt = await res.text();
@@ -107,8 +175,15 @@ function CallbackScreen({ onToken }) {
 
         if (!res.ok) {
           const text = await res.text();
-          console.error("token exchange failed", text);
-          setStatus("failed to exchange code. check console.");
+          console.error("token exchange failed", res.status, text);
+          let errorMsg = `Failed to exchange code (${res.status})`;
+          try {
+            const errorData = JSON.parse(text);
+            errorMsg += `: ${errorData.error || text}`;
+          } catch {
+            errorMsg += `. Check console for details.`;
+          }
+          setStatus(errorMsg);
           return;
         }
 
@@ -119,13 +194,14 @@ function CallbackScreen({ onToken }) {
           return;
         }
 
-        localStorage.setItem("spotify_access_token", data.access_token);
+        // Store both access and refresh tokens
+        setStoredTokens(data.access_token, data.refresh_token);
         onToken(data.access_token);
 
         window.history.replaceState({}, "", "/");
       } catch (err) {
-        console.error(err);
-        setStatus("something went wrong. check console.");
+        console.error("Callback error:", err);
+        setStatus(`Error: ${err.message || "Check console for details"}`);
       }
     }
 
@@ -144,7 +220,7 @@ function CallbackScreen({ onToken }) {
 
 /* ────────────── Dashboard ────────────── */
 
-function Dashboard({ token, onLogout }) {
+function Dashboard({ token, onLogout, onTokenUpdate }) {
   const [timeRange, setTimeRange] = useState("short_term");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -153,6 +229,11 @@ function Dashboard({ token, onLogout }) {
   const [topArtists, setTopArtists] = useState([]);
   const [playlists, setPlaylists] = useState([]);
   const [recent, setRecent] = useState([]);
+  const [currentToken, setCurrentToken] = useState(token);
+
+  useEffect(() => {
+    setCurrentToken(token);
+  }, [token]);
 
   useEffect(() => {
     let cancelled = false;
@@ -164,17 +245,52 @@ function Dashboard({ token, onLogout }) {
 
         const [me, tracks, artists, playlistsRes, recentRes] = await Promise.all(
           [
-            spotifyFetch(token, "/me"),
+            spotifyFetch(currentToken, "/me", (newToken) => {
+              if (!cancelled) {
+                setCurrentToken(newToken);
+                if (onTokenUpdate) onTokenUpdate(newToken);
+              }
+            }),
             spotifyFetch(
-              token,
-              `/me/top/tracks?time_range=${timeRange}&limit=15`
+              currentToken,
+              `/me/top/tracks?time_range=${timeRange}&limit=15`,
+              (newToken) => {
+                if (!cancelled) {
+                  setCurrentToken(newToken);
+                  if (onTokenUpdate) onTokenUpdate(newToken);
+                }
+              }
             ),
             spotifyFetch(
-              token,
-              `/me/top/artists?time_range=${timeRange}&limit=15`
+              currentToken,
+              `/me/top/artists?time_range=${timeRange}&limit=15`,
+              (newToken) => {
+                if (!cancelled) {
+                  setCurrentToken(newToken);
+                  if (onTokenUpdate) onTokenUpdate(newToken);
+                }
+              }
             ),
-            spotifyFetch(token, "/me/playlists?limit=20"),
-            spotifyFetch(token, "/me/player/recently-played?limit=25"),
+            spotifyFetch(
+              currentToken,
+              "/me/playlists?limit=20",
+              (newToken) => {
+                if (!cancelled) {
+                  setCurrentToken(newToken);
+                  if (onTokenUpdate) onTokenUpdate(newToken);
+                }
+              }
+            ),
+            spotifyFetch(
+              currentToken,
+              "/me/player/recently-played?limit=25",
+              (newToken) => {
+                if (!cancelled) {
+                  setCurrentToken(newToken);
+                  if (onTokenUpdate) onTokenUpdate(newToken);
+                }
+              }
+            ),
           ]
         );
 
@@ -202,7 +318,7 @@ function Dashboard({ token, onLogout }) {
     return () => {
       cancelled = true;
     };
-  }, [token, timeRange, onLogout]);
+  }, [currentToken, timeRange, onLogout, onTokenUpdate]);
 
   const displayName =
     profile?.display_name || profile?.id || "spotify user";
@@ -649,15 +765,36 @@ function Dashboard({ token, onLogout }) {
 /* ────────────── Root app ────────────── */
 
 export default function App() {
+  // Check for logout parameter FIRST, before initializing token state
+  const urlParams = new URLSearchParams(window.location.search);
+  const isLogout = urlParams.has("logout");
+  
+  // If logout parameter exists, clear tokens immediately
+  if (isLogout) {
+    clearStoredTokens();
+    // Clean up the URL immediately
+    window.history.replaceState({}, "", "/");
+  }
+  
   const [token, setToken] = useState(
-    () => localStorage.getItem("spotify_access_token") || ""
+    () => {
+      // Don't load token if we just logged out
+      if (isLogout) return "";
+      return getStoredTokens().accessToken || "";
+    }
   );
   const pathname = window.location.pathname;
 
   const handleLogout = () => {
-    localStorage.removeItem("spotify_access_token");
+    // Clear all tokens from localStorage
+    clearStoredTokens();
     setToken("");
-    window.location.href = "/";
+    // Force a full page reload with cache busting to ensure clean state
+    window.location.href = "/?logout=" + Date.now();
+  };
+
+  const handleTokenUpdate = (newToken) => {
+    setToken(newToken);
   };
 
   if (pathname === "/callback") {
@@ -668,5 +805,5 @@ export default function App() {
     return <LoginScreen />;
   }
 
-  return <Dashboard token={token} onLogout={handleLogout} />;
+  return <Dashboard token={token} onLogout={handleLogout} onTokenUpdate={handleTokenUpdate} />;
 }
