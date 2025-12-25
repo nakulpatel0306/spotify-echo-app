@@ -22,6 +22,7 @@ body {
   margin: 0;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
     "Inter", sans-serif;
+  font-size: 15px;
   background: radial-gradient(circle at top left, #2e244a, #020008 70%);
   color: var(--text);
 }
@@ -32,13 +33,13 @@ body {
   border-radius: 999px;
   border: none;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 500;
   text-transform: lowercase;
 }
 
 .btn.primary {
-  padding: 11px 26px;
+  padding: 14px 32px;
   background: var(--accent);
   color: #050309;
 }
@@ -48,7 +49,7 @@ body {
 }
 
 .btn.ghost {
-  padding: 6px 12px;
+  padding: 8px 16px;
   background: transparent;
   color: var(--muted);
 }
@@ -62,10 +63,10 @@ body {
   border: 1px solid var(--border-subtle);
   background: #0b0914;
   color: var(--muted);
-  font-size: 12px;
-  padding: 6px 10px;
+  font-size: 15px;
+  padding: 8px 14px;
   cursor: pointer;
-  margin-right: 6px;
+  margin-right: 8px;
 }
 
 .chip.active {
@@ -81,29 +82,29 @@ body {
 }
 
 .muted.mini {
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .muted.tiny {
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .logo-word {
-  font-size: 24px;
+  font-size: 30px;
   font-weight: 600;
   letter-spacing: 0.16em;
   text-transform: uppercase;
 }
 
 .logo-word.small {
-  font-size: 18px;
+  font-size: 22px;
 }
 
 /* ────────────── landing ────────────── */
 
 .landing {
   min-height: 100vh;
-  padding: 40px 24px;
+  padding: 50px 32px;
   position: relative;
   overflow: hidden;
   background: radial-gradient(circle at top left, #281f49, #05020b 70%);
@@ -135,32 +136,32 @@ body {
 
 .cardish {
   background: rgba(10, 6, 20, 0.8);
-  border-radius: 24px;
+  border-radius: 28px;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  padding: 32px 34px 30px;
+  padding: 40px 42px 38px;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.9);
 }
 
 .landing-logo-word {
-  font-size: 58px;
+  font-size: 72px;
   font-weight: 800;
   letter-spacing: 0.26em;
   text-transform: uppercase;
 }
 
 .landing-main-title {
-  font-size: 34px;
+  font-size: 42px;
   margin: 0;
 }
 
 .landing-main-sub {
-  font-size: 15px;
+  font-size: 18px;
   color: var(--muted);
-  max-width: 480px;
+  max-width: 600px;
 }
 
 .landing-note {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--muted);
 }
 
@@ -178,8 +179,8 @@ body {
   background: var(--surface);
   border-radius: var(--radius-lg);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 22px 20px 18px;
-  max-width: 380px;
+  padding: 28px 26px 24px;
+  max-width: 480px;
   width: 100%;
 }
 
@@ -187,27 +188,27 @@ body {
 
 .app-shell {
   min-height: 100vh;
-  padding: 14px 18px 18px;
+  padding: 20px 24px 24px;
   background: radial-gradient(circle at top left, #2e244a, #020008 70%);
 }
 
 .app-header {
-  max-width: 1200px;
-  margin: 0 auto 14px;
+  max-width: 1400px;
+  margin: 0 auto 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 14px;
 }
 
 .app-header-left {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
 }
 
 .favicon {
-  font-size: 18px;
+  font-size: 24px;
 }
 
 .app-header-right {
@@ -216,23 +217,23 @@ body {
 }
 
 .app-main {
-  max-width: 1200px;
+  max-width: 1400px;
   margin: 0 auto;
   background: linear-gradient(160deg, #17142d, #04020c 70%);
-  border-radius: 22px;
+  border-radius: 28px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 14px 14px 12px;
+  padding: 20px 20px 18px;
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.9);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
 }
 
 /* rows / cards */
 
 .row {
   display: flex;
-  gap: 10px;
+  gap: 14px;
 }
 
 .row-top .card {
@@ -254,27 +255,30 @@ body {
 
 .row-bottom .card {
   flex: 1;
+  min-width: 0; /* Allow flex items to shrink below content size */
 }
 
 .card {
   background: var(--surface);
   border-radius: var(--radius);
   border: 1px solid var(--border-subtle);
-  padding: 10px 11px 9px;
+  padding: 16px 18px 14px;
   display: flex;
   flex-direction: column;
+  min-width: 0; /* Ensure cards can shrink */
+  overflow: hidden; /* Prevent content overflow */
 }
 
 .card-header {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  margin-bottom: 6px;
+  margin-bottom: 10px;
 }
 
 .card-header h3 {
   margin: 0;
-  font-size: 14px;
+  font-size: 18px;
   font-weight: 500;
 }
 
@@ -283,26 +287,26 @@ body {
 .profile-main {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 14px;
 }
 
 .profile-avatar {
-  width: 54px;
-  height: 54px;
+  width: 72px;
+  height: 72px;
   border-radius: 999px;
   background: #3f335c;
   object-fit: cover;
 }
 
 .profile-label {
-  font-size: 11px;
+  font-size: 13px;
   text-transform: uppercase;
   color: var(--muted);
   letter-spacing: 0.08em;
 }
 
 .profile-name {
-  font-size: 18px;
+  font-size: 24px;
   font-weight: 500;
 }
 
@@ -313,15 +317,15 @@ body {
 }
 
 .stat-label {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
 
 .stat-value {
-  font-size: 18px;
-  margin-top: 4px;
+  font-size: 24px;
+  margin-top: 6px;
 }
 
 /* metric cards */
@@ -331,27 +335,27 @@ body {
 }
 
 .metric-label {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
 .metric-main {
-  font-size: 13px;
+  font-size: 16px;
 }
 
 .metric-album {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
 }
 
 .metric-album-cover {
-  width: 46px;
-  height: 46px;
-  border-radius: 10px;
+  width: 64px;
+  height: 64px;
+  border-radius: 12px;
   object-fit: cover;
   background: #3d3459;
 }
@@ -359,8 +363,8 @@ body {
 /* playlists inside metric card */
 
 .metric-mini-title {
-  margin-top: 10px;
-  font-size: 11px;
+  margin-top: 12px;
+  font-size: 13px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--muted);
@@ -369,30 +373,30 @@ body {
 .metric-playlists {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 6px;
-  max-height: 60px;
+  gap: 8px;
+  margin-top: 8px;
+  max-height: 80px;
   overflow-y: auto;
 }
 
 .metric-playlist-pill {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 3px 8px;
+  gap: 8px;
+  padding: 4px 10px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.04);
 }
 
 .metric-playlist-dot {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
   border-radius: 999px;
   background: var(--accent);
 }
 
 .metric-playlist-name {
-  font-size: 11px;
+  font-size: 13px;
   white-space: nowrap;
 }
 
@@ -401,9 +405,9 @@ body {
 .activity-chart {
   display: flex;
   align-items: flex-end;
-  gap: 3px;
-  height: 70px;
-  margin-top: 4px;
+  gap: 4px;
+  height: 90px;
+  margin-top: 6px;
 }
 
 .activity-bar-wrapper {
@@ -425,9 +429,9 @@ body {
 .activity-axis {
   display: flex;
   justify-content: space-between;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
-  margin-top: 4px;
+  margin-top: 6px;
 }
 
 /* core genre chips */
@@ -435,13 +439,13 @@ body {
 .metric-genre-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 6px;
+  gap: 8px;
+  margin-bottom: 8px;
 }
 
 .genre-chip {
-  font-size: 11px;
-  padding: 4px 8px;
+  font-size: 13px;
+  padding: 6px 12px;
   border-radius: 999px;
   background: rgba(168, 85, 255, 0.16);
   border: 1px solid rgba(168, 85, 255, 0.4);
@@ -454,22 +458,25 @@ body {
   padding: 0;
   margin: 0;
   overflow-y: auto;
-  max-height: 260px;
+  max-height: 340px;
+  width: 100%; /* Ensure list takes full width */
 }
 
 .list.compact {
-  max-height: 260px;
+  max-height: 340px;
 }
 
 .list-item {
   display: flex;
   align-items: center;
-  padding: 5px 2px;
-  border-radius: 9px;
+  padding: 8px 4px;
+  border-radius: 12px;
+  width: 100%; /* Ensure items take full width */
+  min-width: 0; /* Allow shrinking */
 }
 
 .list-item.small {
-  padding: 4px 2px;
+  padding: 6px 4px;
 }
 
 .list-item:hover {
@@ -477,27 +484,27 @@ body {
 }
 
 .index {
-  width: 20px;
+  width: 28px;
   text-align: right;
-  margin-right: 6px;
-  font-size: 12px;
+  margin-right: 10px;
+  font-size: 15px;
   color: var(--muted);
 }
 
 .thumb,
 .avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 9px;
-  margin-right: 8px;
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  margin-right: 12px;
   background: #3d3459;
   object-fit: cover;
   flex-shrink: 0;
 }
 
 .thumb.sm {
-  width: 34px;
-  height: 34px;
+  width: 48px;
+  height: 48px;
 }
 
 .avatar {
@@ -510,20 +517,27 @@ body {
 
 .meta {
   min-width: 0;
+  flex: 1; /* Take available space */
   display: flex;
   flex-direction: column;
+  overflow: hidden; /* Prevent overflow */
 }
 
 .primary {
-  font-size: 13px;
+  font-size: 16px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  width: 100%; /* Ensure it respects parent width */
 }
 
 .secondary {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%; /* Ensure it respects parent width */
 }
 
 /* playlists */
@@ -533,30 +547,30 @@ body {
 }
 
 .playlist-row {
-  margin-top: 4px;
+  margin-top: 6px;
   display: flex;
-  gap: 10px;
+  gap: 14px;
   overflow-x: auto;
-  padding-bottom: 4px;
+  padding-bottom: 6px;
 }
 
 .playlist-card {
-  min-width: 130px;
-  max-width: 150px;
+  min-width: 170px;
+  max-width: 200px;
   flex: 0 0 auto;
 }
 
 .playlist-cover {
   width: 100%;
-  height: 120px;
-  border-radius: 13px;
+  height: 160px;
+  border-radius: 16px;
   object-fit: cover;
-  margin-bottom: 5px;
+  margin-bottom: 8px;
   background: #3d3459;
 }
 
 .playlist-name {
-  font-size: 12px;
+  font-size: 15px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -586,39 +600,87 @@ body {
 
 /* responsive */
 
+@media (max-width: 1200px) {
+  .app-main {
+    max-width: 100%;
+  }
+  
+  .app-header {
+    max-width: 100%;
+  }
+  
+  .row-bottom .card {
+    min-width: 280px; /* Minimum width for readability */
+  }
+}
+
 @media (max-width: 960px) {
   .landing-inner-simple {
     max-width: 100%;
   }
 
   .landing-logo-word {
-    font-size: 42px;
+    font-size: 52px;
   }
 
   .landing-main-title {
-    font-size: 26px;
+    font-size: 32px;
+  }
+
+  .landing-main-sub {
+    font-size: 16px;
   }
 
   .app-shell {
-    padding: 12px;
+    padding: 16px;
   }
 
   .app-main {
-    padding: 10px;
+    padding: 16px;
   }
 
   .app-header {
     flex-direction: column;
     align-items: flex-start;
-    gap: 8px;
+    gap: 12px;
   }
 
   .row {
     flex-direction: column;
   }
+  
+  .row-bottom .card {
+    min-width: 100%; /* Full width on mobile */
+    width: 100%;
+  }
 
   .row-playlists .playlists-card,
   .row-playlists .metric-card {
     flex: none;
+  }
+  
+  .card {
+    padding: 14px 16px 12px;
+  }
+  
+  .list {
+    max-height: 300px; /* Slightly smaller on mobile */
+  }
+  
+  .list.compact {
+    max-height: 300px;
+  }
+  
+  .profile-avatar {
+    width: 64px;
+    height: 64px;
+  }
+  
+  .profile-name {
+    font-size: 20px;
+  }
+  
+  .stat-value {
+    font-size: 20px;
   }
 }
