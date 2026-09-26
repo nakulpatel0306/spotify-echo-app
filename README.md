@@ -1,154 +1,59 @@
-# 🎧 echo – Spotify Tracker
+# echo - Spotify Tracker
 
-A simple, modern web application that integrates with the Spotify Web API to give you a clear, data-driven view of your listening habits.
-Explore your top tracks, top artists, favourite genres, audio feature profiles (energy, danceability, valence, etc.), and your recent listening history — all displayed through clean, interactive visuals with adjustable time ranges.
+A web app that connects to your Spotify account and shows your listening habits: top tracks, top artists, genres, audio mood and recent history.
 
-The project is built with a Node.js + Express backend API for authentication and data processing, and a React + Vite frontend for a fast, responsive user interface.
-Deployment is optimized for Render (backend hosting) and Vercel (frontend hosting), allowing the entire app to run smoothly in production with minimal setup.
+## At a Glance
 
----
+- **Frontend:** React, Vite (hosted on Vercel)
+- **Backend:** Node.js, Express (hosted on Render)
+- **API:** Spotify Web API with OAuth
+- **State:** Complete
 
-## ✨ Features
-- Top Tracks & Top Artists across 3 Spotify time ranges:
-  - last 4 weeks
-  - last 6 months
-  - all time
-- Audio mood summary: **energy**, **danceability**, **tempo**
-- Top genres extracted automatically from your top artists
-- Listening history from the past 48 hours
-- Recently played + total listening minutes + session detection
-- Clean, simple UI inspired by Spotify’s modern aesthetic
+## Features
 
----
+- Top tracks and artists over the last 4 weeks, 6 months or all time
+- Audio mood summary for energy, danceability and tempo
+- Top genres pulled from your top artists
+- Last 48 hours of listening, with total minutes and session detection
 
-## 🗂 Project Structure
+## Project Structure
+
 ```
 .
-├── backend/                        # Express server (Spotify auth + stats)
-│   ├── server.js                   # Auth handler + stats aggregation
-│   ├── package.json
-│   └── .env                        # SPOTIFY_CLIENT_ID, SECRET, PORT
-├── frontend/                       # React + Vite UI
-│   ├── index.html
-│   ├── package.json
-│   └── src/
-│       ├── App.jsx                 # Main UI & views
-│       ├── main.jsx                # SPA entrypoint
-│       └── styles.css              # Visual design
-└── README.md
+├── backend/
+│   ├── server.js       # OAuth token exchange, refresh and stats aggregation
+│   └── .env.example
+└── frontend/
+    ├── src/
+    │   ├── App.jsx     # Views and Spotify login flow
+    │   ├── main.jsx    # Entry point
+    │   └── styles.css
+    └── vercel.json
 ```
 
----
+## Running Locally
 
-## 🚀 Getting Started (Local Development)
-
-### 1) Spotify Developer Setup  
-Create an app at:  
-https://developer.spotify.com/dashboard
-
-Add this Redirect URI:
-
-```
-http://127.0.0.1:5173/callback
-```
-
-Copy your **Client ID** and **Client Secret**.
-
----
-
-## 🛠 Backend Setup (Express)
-
-```bash
-cd backend
-npm install
-```
-
-Create `.env`:
-
-```env
-SPOTIFY_CLIENT_ID=your_client_id_here
-SPOTIFY_CLIENT_SECRET=your_client_secret_here
-PORT=3001
-```
-
-Start the backend:
-
-```bash
-npm start
-# Backend running on port 3001
-```
-
----
-
-## 💻 Frontend Setup (React + Vite)
-
-```bash
-cd frontend
-npm install
-npm run dev -- --host 127.0.0.1
-```
-
-Open:
-
-```
-http://127.0.0.1:5173
-```
-
-Log in with Spotify — dashboard loads instantly.
-
----
-
-# 🌐 Deployment
-
-## Backend → Render
-1. Go to https://dashboard.render.com
-2. Create a **Web Service**
-3. Connect your GitHub repo  
-4. Set environment variables:
+1. Create an app in the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard) and add this redirect URI:
    ```
-   SPOTIFY_CLIENT_ID=xxx
-   SPOTIFY_CLIENT_SECRET=xxx
+   http://127.0.0.1:5173/callback
    ```
-5. Set build command:
-   ```
+   Then put your Client ID in `CLIENT_ID` at the top of `frontend/src/App.jsx`.
+2. Set up and start the backend (port 3001):
+   ```bash
+   cd backend
+   cp .env.example .env   # add SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET
    npm install
+   npm start
    ```
-6. Start command:
+3. In a second terminal, start the frontend and open `http://127.0.0.1:5173`:
+   ```bash
+   cd frontend
+   npm install
+   npm run dev -- --host 127.0.0.1
    ```
-   node server.js
-   ```
 
-Your backend will deploy to something like:
+## Deploying
 
-```
-https://echo-backend.onrender.com
-```
-
----
-
-## Frontend → Vercel
-1. Go to https://vercel.com
-2. Import your GitHub repo
-3. Set `VITE_BACKEND_URL` or update API base URL in App.jsx
-4. Set the production Redirect URI in Spotify to:
-
-```
-https://your-vercel-domain.vercel.app/callback
-```
-
-Deploy → Vercel will give you a live frontend URL.
-
----
-
-## 📤 Commit & Push
-
-From project root:
-
-```bash
-git status
-git add .
-git commit -m "chore: add README with render/vercel setup"
-git push
-```
-
-Your project is now ready for local dev **and** cloud deployment.
+- **Backend on Render:** create a Web Service from this repo with root `backend`, build command `npm install`, start command `node server.js`, and set `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET`
+- **Frontend on Vercel:** import the repo with root `frontend`, then set `VITE_BACKEND_BASE` to the Render URL and `VITE_REDIRECT_URI` to `https://<your-domain>/callback`
+- Add the production redirect URI in the Spotify dashboard as well
