@@ -71,3 +71,7 @@ A web app that connects to your Spotify account and turns it into a one-page das
 - **Backend on Render:** create a Web Service from this repo with root `backend`, build command `npm install`, start command `node server.js`, and set `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET`
 - **Frontend on Vercel:** import the repo with root `frontend`, then set `VITE_BACKEND_BASE` to the Render URL and `VITE_REDIRECT_URI` to `https://<your-domain>/callback`
 - Add the production redirect URI in the Spotify dashboard as well
+
+## License
+
+MIT, see [LICENSE](LICENSE).
